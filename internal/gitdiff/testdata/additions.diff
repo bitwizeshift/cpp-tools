@@ -1,0 +1,137 @@
+diff --git a/go.mod b/go.mod
+index 75171da..a1d2ddf 100644
+--- a/go.mod
++++ b/go.mod
+@@ -8,3 +8,5 @@ require (
+ 	go.yaml.in/yaml/v4 v4.0.0-rc.4
+ 	mvdan.cc/sh/v3 v3.13.1
+ )
++
++require golang.org/x/sys v0.43.0
+diff --git a/go.sum b/go.sum
+index 0806f1d..f9ef3f6 100644
+--- a/go.sum
++++ b/go.sum
+@@ -12,5 +12,7 @@ github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
+ github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
+ go.yaml.in/yaml/v4 v4.0.0-rc.4 h1:UP4+v6fFrBIb1l934bDl//mmnoIZEDK0idg1+AIvX5U=
+ go.yaml.in/yaml/v4 v4.0.0-rc.4/go.mod h1:aZqd9kCMsGL7AuUv/m/PvWLdg5sjJsZ4oHDEnfPPfY0=
++golang.org/x/sys v0.43.0 h1:Rlag2XtaFTxp19wS8MXlJwTvoh8ArU6ezoyFsMyCTNI=
++golang.org/x/sys v0.43.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+ mvdan.cc/sh/v3 v3.13.1 h1:DP3TfgZhDkT7lerUdnp6PTGKyxxzz6T+cOlY/xEvfWk=
+ mvdan.cc/sh/v3 v3.13.1/go.mod h1:lXJ8SexMvEVcHCoDvAGLZgFJ9Wsm2sulmoNEXGhYZD0=
+diff --git a/internal/cfg/config.go b/internal/cfg/config.go
+index 1c378b1..82d8944 100644
+--- a/internal/cfg/config.go
++++ b/internal/cfg/config.go
+@@ -10,6 +10,9 @@ import (
+
+ // Config represents the configuration for the Claude plugin helper.
+ type Config struct {
++	// Logging represents the configuration for logging in the plugin helper.
++	Logging LoggingConfig `yaml:"logging"`
++
+ 	// Decisions represents the configuration for decisions on permission requests.
+ 	// This applies to PreToolUse, PermissionRequest, etc
+ 	Decisions DecisionConfig `yaml:"decisions"`
+diff --git a/internal/cfg/decisions.go b/internal/cfg/decisions.go
+index 625b101..a8a72f0 100644
+--- a/internal/cfg/decisions.go
++++ b/internal/cfg/decisions.go
+@@ -1,17 +1,72 @@
+ package cfg
+
+ import (
++	"encoding"
++	"fmt"
++
+ 	"github.com/bitwizeshift/claude-hook-manager/internal/claude"
+ 	"github.com/bitwizeshift/claude-hook-manager/internal/shell"
+ )
+
+ // DecisionConfig represents the configuration for decisions for various hooks.
+ type DecisionConfig struct {
++	// FileAccess represents decisions for file access checks, where the key is a
++	// file-path that may include globs, and the value is the configurable
++	// decision for that file path.
++	FileAccess map[string]FileAccessDecision `yaml:"file-access"`
++
+ 	// PreToolUse represents decisions to be automatically made for pre-tool-use
+ 	// hooks.
+ 	PreToolUse PreToolUseDecision `yaml:"pre-tool-use"`
+ }
+
++// FilePermission represents the type of file access permission to check for in
++// a FileAccessDecision.
++type FilePermission string
++
++const (
++	// FilePermissionRead represents the Read file permission, which allows a tool to read a file's contents.
++	FilePermissionRead FilePermission = "read"
++
++	// FilePermissionWrite represents the Write file permission, which allows a
++	// tool to modify a file's contents.
++	FilePermissionWrite FilePermission = "write"
++
++	// FilePermissionReadWrite represents both Read and Write file permissions.
++	FilePermissionReadWrite FilePermission = "readwrite"
++)
++
++// UnmarshalText implements the encoding.TextUnmarshaler interface for
++// FilePermission, ensuring that only valid file permissions can be unmarshaled
++// from YAML.
++func (fp *FilePermission) UnmarshalText(text []byte) error {
++	switch string(text) {
++	case string(FilePermissionRead), string(FilePermissionWrite), string(FilePermissionReadWrite):
++		*fp = FilePermission(text)
++		return nil
++	default:
++		return fmt.Errorf("invalid file permission: %s", text)
++	}
++}
++
++var _ encoding.TextUnmarshaler = (*FilePermission)(nil)
++
++// FileAccessDecision represents a file path that should be checked before
++// allowing a tool to be used. If the file path matches, the specified decision
++// is returned.
++type FileAccessDecision struct {
++	// Permission is the file permission that should be checked before allowing a
++	// tool to be used.
++	Permission FilePermission `yaml:"permission"`
++
++	// Decision is the decision to make if the file path matches.
++	Decision claude.Decision `yaml:"decision"`
++
++	// Reason is an optional reason for the decision, which can be used to provide
++	// additional context to the user or claude for why the decision was made.
++	Reason string `yaml:"reason,omitempty"`
++}
++
+ // PreToolUseDecision represents configurations for matchers for the
+ // pre-tool-use hook.
+ type PreToolUseDecision struct {
+@@ -43,3 +98,23 @@ type BashPreToolUseDecision struct {
+ 	// decision is to allow or ask.
+ 	ReplacementCommand shell.Command `yaml:"alternative-command,omitempty"`
+ }
++
++// ReadPreToolUseDecision represents a file path that should be checked before
++// allowing the Read operation to be used. If the file path matches, the
++// specified decision is returned.
++type ReadPreToolUseDecision struct {
++	// IfFilePath is the file path that should be checked before allowing the
++	// Read operation to be used.
++	IfFilePath string `yaml:"if-file-path"`
++
++	// Decision is the decision to make if the file path matches.
++	Decision claude.Decision `yaml:"decision"`
++
++	// Reason is an optional reason for the decision, which can be used to provide
++	// additional context to the user or claude for why the decision was made.
++	Reason string `yaml:"reason"`
++
++	// AdditionalContext is an optional field that can be used to provide any
++	// additional context that may be relevant to the decision back to Claude.
++	AdditionalContext string `yaml:"additional-context,omitempty"`
++}

@@ -1,0 +1,1633 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 15fa57f..6cabba1 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -32,6 +32,7 @@ option(ALLOY_COMPILE_EXTRAS "Compiles extras that ship with this library" OFF)
+ option(ALLOY_COMPILE_EXAMPLES "Compiles example programs that use this library" OFF)
+ option(ALLOY_ENABLE_CLANG_TIDY "Enables clang-tidy integration" OFF)
+ option(ALLOY_ENABLE_EXCEPTIONS "Enable exception handling" ON)
++option(ALLOY_ENABLE_COVERAGE "Enable code coverage for this project" OFF)
+ option(ALLOY_PATCH_COMPILE_COMMANDS "Patches the 'compile_commands.json' file to the build directory" OFF)
+
+ # Core settings
+diff --git a/CMakePresets.json b/CMakePresets.json
+index 65e1524..be05f79 100644
+--- a/CMakePresets.json
++++ b/CMakePresets.json
+@@ -44,6 +44,9 @@
+       "description": "Builds with clang from PATH",
+       "environment": {
+         "CXX": "clang++"
++      },
++      "cacheVariables": {
++        "ALLOY_ENABLE_COVERAGE": "ON"
+       }
+     }, {
+       "name": "gcc",
+@@ -52,6 +55,9 @@
+       "description": "Builds with GCC from PATH",
+       "environment": {
+         "CXX": "g++"
++      },
++      "cacheVariables": {
++        "ALLOY_ENABLE_COVERAGE": "ON"
+       }
+     }, {
+       "name": "clang-cl",
+diff --git a/example/CMakeLists.txt b/example/CMakeLists.txt
+index e69de29..9c13bfa 100644
+--- a/example/CMakeLists.txt
++++ b/example/CMakeLists.txt
+@@ -0,0 +1,89 @@
++project(AlloyExample LANGUAGES CXX)
++
++set(IMGUI_PATH "${IMGUI_SOURCE_DIR}")
++
++set(imgui_source_files
++  "${IMGUI_PATH}/imgui.cpp"
++  "${IMGUI_PATH}/imgui_demo.cpp"
++  "${IMGUI_PATH}/imgui_draw.cpp"
++  "${IMGUI_PATH}/imgui_tables.cpp"
++  "${IMGUI_PATH}/imgui_widgets.cpp"
++  "${IMGUI_PATH}/backends/imgui_impl_opengl3.cpp"
++  "${IMGUI_PATH}/backends/imgui_impl_sdl.cpp"
++)
++
++set(source_files
++  src/main.cpp
++
++  # alloy-ide
++  src/alloy/experimental/ide/components/scene_control_component.cpp
++  src/alloy/experimental/ide/pane.cpp
++  include/alloy/experimental/ide/panes/debug_pane.hpp
++  src/alloy/experimental/ide/panes/debug_pane.cpp
++  include/alloy/experimental/ide/components/fps_component.hpp
++  src/alloy/experimental/ide/components/fps_component.cpp
++
++  # alloy-example
++  src/alloy-example/components/scene_selection_control.cpp
++  src/alloy-example/panes/scene_selection_pane.cpp
++  src/alloy-example/scenes/01_hello_triangle.hpp
++  src/alloy-example/scenes/01_hello_triangle.cpp
++  src/alloy-example/scenes/02_shaders.hpp
++  src/alloy-example/scenes/02_shaders.cpp
++  src/alloy-example/scenes/03_textures.hpp
++  src/alloy-example/scenes/03_textures.cpp
++  src/alloy-example/scenes/99_cube.hpp
++  src/alloy-example/scenes/99_cube.cpp
++  include/alloy/experimental/ide/widgets/widget.hpp
++  include/alloy/experimental/ide/widgets/selection_list.hpp
++  src/alloy-example/scenes/98_solar_system.hpp
++  src/alloy-example/scenes/98_solar_system.cpp
++  src/alloy-example/scenes/97_teapot.hpp
++  src/alloy-example/scenes/97_teapot.cpp
++)
++
++add_executable(AlloyExample
++    ${source_files}
++    ${imgui_source_files}
++)
++target_include_directories(AlloyExample
++  PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include"
++  PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src"
++  PRIVATE "${IMGUI_PATH}"
++)
++
++set(OpenGL_GL_PREFERENCE GLVND)
++find_package(OpenGL REQUIRED)
++find_package(SDL2 REQUIRED)
++find_package(GLEW REQUIRED)
++
++if (MINGW)
++    target_link_libraries(AlloyExample
++        PRIVATE mingw32
++        PRIVATE imm32
++    )
++endif ()
++
++target_include_directories(AlloyExample PRIVATE external)
++
++target_link_libraries(AlloyExample
++    PUBLIC Alloy::Core
++    PUBLIC Alloy::IO
++    PUBLIC Alloy::Engine
++    PUBLIC Alloy::Render
++    PUBLIC Alloy::Render::GL
++    PRIVATE Alloy::Extra::SDL2Bindings
++    PRIVATE SDL2::SDL2
++    PRIVATE OpenGL::GL
++    PRIVATE GLEW::GLEW
++    PRIVATE tga-lib
++)
++
++target_compile_features(${PROJECT_NAME}
++    PUBLIC cxx_std_20
++)
++set_target_properties(${PROJECT_NAME}
++    PROPERTIES
++    CXX_STANDARD_REQUIRED ON
++    CXX_EXTENSIONS OFF
++)
+diff --git a/extra/allocators/CMakeLists.txt b/extra/allocators/CMakeLists.txt
+index 0c987ef..edb907e 100644
+--- a/extra/allocators/CMakeLists.txt
++++ b/extra/allocators/CMakeLists.txt
+@@ -32,7 +32,7 @@ add_library(${PROJECT_NAME}::Extra::Allocators ALIAS
+ )
+
+ target_compile_features(${PROJECT_NAME}ExtraAllocators
+-  PUBLIC cxx_std_17
++  PUBLIC cxx_std_20
+ )
+ target_link_libraries(${PROJECT_NAME}ExtraAllocators
+   PUBLIC ${PROJECT_NAME}::Core
+diff --git a/extra/logging/CMakeLists.txt b/extra/logging/CMakeLists.txt
+index 760c0d0..80b3e0f 100644
+--- a/extra/logging/CMakeLists.txt
++++ b/extra/logging/CMakeLists.txt
+@@ -35,7 +35,7 @@ add_library(${PROJECT_NAME}::Extra::Logging ALIAS
+ )
+
+ target_compile_features(${PROJECT_NAME}ExtraLogging
+-  PUBLIC cxx_std_17
++  PUBLIC cxx_std_20
+ )
+ target_link_libraries(${PROJECT_NAME}ExtraLogging
+   PUBLIC fmt::fmt
+diff --git a/extra/sdl2-bindings/CMakeLists.txt b/extra/sdl2-bindings/CMakeLists.txt
+index 79e5903..5bdcbdf 100644
+--- a/extra/sdl2-bindings/CMakeLists.txt
++++ b/extra/sdl2-bindings/CMakeLists.txt
+@@ -34,7 +34,7 @@ add_library(${PROJECT_NAME}::Extra::SDL2Bindings ALIAS
+ )
+
+ target_compile_features(${PROJECT_NAME}ExtraSDL2Bindings
+-  PUBLIC cxx_std_17
++  PUBLIC cxx_std_20
+ )
+ set_target_properties(${PROJECT_NAME}ExtraSDL2Bindings
+   PROPERTIES
+diff --git a/extra/sdl2-bindings/include/alloy/extra/sdl2-bindings/sdl2_gl_window.hpp b/extra/sdl2-bindings/include/alloy/extra/sdl2-bindings/sdl2_gl_window.hpp
+index 60dca76..c3eb126 100644
+--- a/extra/sdl2-bindings/include/alloy/extra/sdl2-bindings/sdl2_gl_window.hpp
++++ b/extra/sdl2-bindings/include/alloy/extra/sdl2-bindings/sdl2_gl_window.hpp
+@@ -40,8 +40,6 @@
+
+ #include <SDL.h>
+
+-#include <cstdint> // std::uint32_t
+-
+ namespace alloy::extra {
+
+   //============================================================================
+diff --git a/extra/sdl2-bindings/src/alloy/extra/sdl2-bindings/sdl2_pump_source.cpp b/extra/sdl2-bindings/src/alloy/extra/sdl2-bindings/sdl2_pump_source.cpp
+index 34893d2..4c751cf 100644
+--- a/extra/sdl2-bindings/src/alloy/extra/sdl2-bindings/sdl2_pump_source.cpp
++++ b/extra/sdl2-bindings/src/alloy/extra/sdl2-bindings/sdl2_pump_source.cpp
+@@ -3,40 +3,40 @@
+
+ #include "alloy/core/assert.hpp"
+
+-#include "alloy/io/keyboard.hpp"
+ #include "alloy/io/events/keyboard_events.hpp"
+ #include "alloy/io/events/mouse_events.hpp"
++#include "alloy/io/keyboard.hpp"
+
+ #include <SDL.h>
+-
++#include <optional>
+
+ namespace {
+
+-auto to_mouse_button(::Uint8 code) -> std::optional<alloy::io::mouse::button>
+-{
+-  switch (code) {
+-    case SDL_BUTTON_LEFT: {
+-      return alloy::io::mouse::button::left;
+-    }
+-    case SDL_BUTTON_RIGHT: {
+-      return alloy::io::mouse::button::right;
+-    }
+-    case SDL_BUTTON_MIDDLE: {
+-      return alloy::io::mouse::button::middle;
+-    }
+-    default: {
+-      break;
++  auto to_mouse_button(::Uint8 code) -> std::optional<alloy::io::mouse::button>
++  {
++    switch (code) {
++      case SDL_BUTTON_LEFT: {
++        return alloy::io::mouse::button::left;
++      }
++      case SDL_BUTTON_RIGHT: {
++        return alloy::io::mouse::button::right;
++      }
++      case SDL_BUTTON_MIDDLE: {
++        return alloy::io::mouse::button::middle;
++      }
++      default: {
++        break;
++      }
+     }
++    return std::nullopt;
+   }
+-  return std::nullopt;
+-}
+
+-alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+-{
+-  switch (code) {
+-    //-------------------------------------------------------------------------
+-    // Function Keys
+-    //-------------------------------------------------------------------------
++  alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
++  {
++    switch (code) {
++      //-------------------------------------------------------------------------
++      // Function Keys
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_F1: {
+       return alloy::io::keyboard::scan_code::f1;
+@@ -111,9 +111,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::f24;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Number row
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Number row
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_0: {
+       return alloy::io::keyboard::scan_code::number_0;
+@@ -146,9 +146,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::number_9;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Letters
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Letters
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_A: {
+       return alloy::io::keyboard::scan_code::letter_a;
+@@ -229,9 +229,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::letter_z;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Special
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Special
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_ESCAPE: {
+       return alloy::io::keyboard::scan_code::escape;
+@@ -255,9 +255,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::print_screen;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Glyphs
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Glyphs
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_SPACE: {
+       return alloy::io::keyboard::scan_code::space;
+@@ -296,9 +296,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::slash;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Control
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Control
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_LSHIFT: {
+       return alloy::io::keyboard::scan_code::left_shift;
+@@ -328,9 +328,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::menu;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Locking
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Locking
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_CAPSLOCK: {
+       return alloy::io::keyboard::scan_code::caps_lock;
+@@ -339,9 +339,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::num_lock;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Navigation
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Navigation
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_UP: {
+       return alloy::io::keyboard::scan_code::arrow_up;
+@@ -365,9 +365,9 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::page_down;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Keypad
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Keypad
++      //-------------------------------------------------------------------------
+
+     case SDL_SCANCODE_KP_000: {
+       return alloy::io::keyboard::scan_code::keypad_num_000;
+@@ -424,18 +424,19 @@ alloy::io::keyboard::scan_code to_scan_code(::SDL_Scancode code)
+       return alloy::io::keyboard::scan_code::keypad_divide;
+     }
+
+-    default: break;
++    default:
++      break;
++    }
++
++    return alloy::io::keyboard::scan_code::unknown;
+   }
+
+-  return alloy::io::keyboard::scan_code::unknown;
+-}
+-
+-alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+-{
+-  switch (static_cast<::SDL_Keycode>(code)) {
+-    //-------------------------------------------------------------------------
+-    // Function Keys
+-    //-------------------------------------------------------------------------
++  alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
++  {
++    switch (static_cast<::SDL_Keycode>(code)) {
++      //-------------------------------------------------------------------------
++      // Function Keys
++      //-------------------------------------------------------------------------
+
+     case SDLK_F1: {
+       return alloy::io::keyboard::key_code::f1;
+@@ -510,9 +511,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::f24;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Number row
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Number row
++      //-------------------------------------------------------------------------
+
+     case SDLK_0: {
+       return alloy::io::keyboard::key_code::number_0;
+@@ -545,9 +546,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::number_9;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Letters
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Letters
++      //-------------------------------------------------------------------------
+
+     case SDLK_a: {
+       return alloy::io::keyboard::key_code::letter_a;
+@@ -628,9 +629,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::letter_z;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Special
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Special
++      //-------------------------------------------------------------------------
+
+     case SDLK_ESCAPE: {
+       return alloy::io::keyboard::key_code::escape;
+@@ -654,9 +655,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::print_screen;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Glyphs
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Glyphs
++      //-------------------------------------------------------------------------
+
+     case SDLK_SPACE: {
+       return alloy::io::keyboard::key_code::space;
+@@ -695,9 +696,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::slash;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Control
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Control
++      //-------------------------------------------------------------------------
+
+     case SDLK_LSHIFT: {
+       return alloy::io::keyboard::key_code::left_shift;
+@@ -727,9 +728,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::menu;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Locking
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Locking
++      //-------------------------------------------------------------------------
+
+     case SDLK_CAPSLOCK: {
+       return alloy::io::keyboard::key_code::caps_lock;
+@@ -738,10 +739,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::num_lock;
+     }
+
+-
+-    //-------------------------------------------------------------------------
+-    // Navigation
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Navigation
++      //-------------------------------------------------------------------------
+
+     case SDLK_UP: {
+       return alloy::io::keyboard::key_code::arrow_up;
+@@ -765,9 +765,9 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::page_down;
+     }
+
+-    //-------------------------------------------------------------------------
+-    // Keypad
+-    //-------------------------------------------------------------------------
++      //-------------------------------------------------------------------------
++      // Keypad
++      //-------------------------------------------------------------------------
+
+     case SDLK_KP_000: {
+       return alloy::io::keyboard::key_code::keypad_num_000;
+@@ -824,67 +824,67 @@ alloy::io::keyboard::key_code to_key_code(::SDL_Keycode code)
+       return alloy::io::keyboard::key_code::keypad_divide;
+     }
+
+-    default: break;
++    default:
++      break;
++    }
++
++    return alloy::io::keyboard::key_code::unknown;
+   }
+
+-  return alloy::io::keyboard::key_code::unknown;
+-}
++  alloy::io::keyboard::modifiers to_modifiers(::Uint16 modifiers)
++  {
++    const auto mod = static_cast<::SDL_Keymod>(modifiers);
+
+-alloy::io::keyboard::modifiers to_modifiers(::Uint16 modifiers)
+-{
+-  const auto mod = static_cast<::SDL_Keymod>(modifiers);
++    auto result = alloy::io::keyboard::modifiers::none;
+
+-  auto result = alloy::io::keyboard::modifiers::none;
++    if (mod & ::KMOD_LSHIFT) {
++      result |= alloy::io::keyboard::modifiers::left_shift;
++    }
++    if (mod & ::KMOD_RSHIFT) {
++      result |= alloy::io::keyboard::modifiers::right_shift;
++    }
+
+-  if (mod & ::KMOD_LSHIFT) {
+-    result |= alloy::io::keyboard::modifiers::left_shift;
+-  }
+-  if (mod & ::KMOD_RSHIFT) {
+-    result |= alloy::io::keyboard::modifiers::right_shift;
++    if (mod & ::KMOD_LCTRL) {
++      result |= alloy::io::keyboard::modifiers::left_control;
++    }
++    if (mod & ::KMOD_RCTRL) {
++      result |= alloy::io::keyboard::modifiers::right_control;
++    }
++
++    if (mod & ::KMOD_LALT) {
++      result |= alloy::io::keyboard::modifiers::left_alt;
++    }
++    if (mod & ::KMOD_RALT) {
++      result |= alloy::io::keyboard::modifiers::right_alt;
++    }
++
++    if (mod & ::KMOD_LGUI) {
++      result |= alloy::io::keyboard::modifiers::left_host;
++    }
++    if (mod & ::KMOD_RGUI) {
++      result |= alloy::io::keyboard::modifiers::right_host;
++    }
++
++    if (mod & ::KMOD_NUM) {
++      result |= alloy::io::keyboard::modifiers::num_lock;
++    }
++    if (mod & ::KMOD_CAPS) {
++      result |= alloy::io::keyboard::modifiers::caps_lock;
++    }
++    if (mod & ::KMOD_MODE) {
++      result |= alloy::io::keyboard::modifiers::mode;
++    }
++
++    return result;
+   }
+
+-  if (mod & ::KMOD_LCTRL) {
+-    result |= alloy::io::keyboard::modifiers::left_control;
+-  }
+-  if (mod & ::KMOD_RCTRL) {
+-    result |= alloy::io::keyboard::modifiers::right_control;
+-  }
+-
+-  if (mod & ::KMOD_LALT) {
+-    result |= alloy::io::keyboard::modifiers::left_alt;
+-  }
+-  if (mod & ::KMOD_RALT) {
+-    result |= alloy::io::keyboard::modifiers::right_alt;
+-  }
+-
+-  if (mod & ::KMOD_LGUI) {
+-    result |= alloy::io::keyboard::modifiers::left_host;
+-  }
+-  if (mod & ::KMOD_RGUI) {
+-    result |= alloy::io::keyboard::modifiers::right_host;
+-  }
+-
+-  if (mod & ::KMOD_NUM) {
+-    result |= alloy::io::keyboard::modifiers::num_lock;
+-  }
+-  if (mod & ::KMOD_CAPS) {
+-    result |= alloy::io::keyboard::modifiers::caps_lock;
+-  }
+-  if (mod & ::KMOD_MODE) {
+-    result |= alloy::io::keyboard::modifiers::mode;
+-  }
+-
+-  return result;
+-}
+-
+-} // namespace <anonymous>
++} // namespace
+
+ //------------------------------------------------------------------------------
+ // Static Functions
+ //------------------------------------------------------------------------------
+
+-alloy::extra::sdl2_pump_source&
+-  alloy::extra::sdl2_pump_source::instance()
++alloy::extra::sdl2_pump_source& alloy::extra::sdl2_pump_source::instance()
+ {
+   static auto s_instance = sdl2_pump_source{};
+
+@@ -895,20 +895,20 @@ alloy::extra::sdl2_pump_source&
+ // Modifiers
+ //------------------------------------------------------------------------------
+
+-void alloy::extra::sdl2_pump_source
+-  ::attach_window( core::not_null<sdl2_window*> window )
++void alloy::extra::sdl2_pump_source ::attach_window(
++  core::not_null<sdl2_window*> window)
+ {
+   const auto id = ::SDL_GetWindowID(window->window_handle());
+   m_windows[static_cast<unsigned>(id)] = window.get();
+ }
+
+-void alloy::extra::sdl2_pump_source
+-  ::detach_window( core::not_null<sdl2_window*> window )
++void alloy::extra::sdl2_pump_source ::detach_window(
++  core::not_null<sdl2_window*> window)
+ {
+   const auto id = ::SDL_GetWindowID(window->window_handle());
+   const auto it = m_windows.find(static_cast<unsigned>(id));
+
+-  ALLOY_ASSERT( it != m_windows.end() );
++  ALLOY_ASSERT(it != m_windows.end());
+
+   m_windows.erase(it);
+ }
+@@ -917,40 +917,39 @@ void alloy::extra::sdl2_pump_source
+ // Hooks
+ //------------------------------------------------------------------------------
+
+-void alloy::extra::sdl2_pump_source::poll( io::message_pump& p )
+-  noexcept
++void alloy::extra::sdl2_pump_source::poll(io::message_pump& p) noexcept
+ {
+   auto event = ::SDL_Event{};
+
+   // Poll all events and translate them
+   while (::SDL_PollEvent(&event)) {
+     switch (event.type) {
+-      case SDL_WINDOWEVENT: {
+-        handle_window_event(event, p);
+-        break;
+-      }
+-      case SDL_KEYUP: {
+-        handle_keyboard_event(event, io::keyboard::key_state::depressed, p);
+-        break;
+-      }
+-      case SDL_KEYDOWN: {
+-        handle_keyboard_event(event, io::keyboard::key_state::pressed, p);
+-        break;
+-      }
+-      case SDL_MOUSEWHEEL:
+-      case SDL_MOUSEMOTION:
+-      case SDL_MOUSEBUTTONUP:
+-      case SDL_MOUSEBUTTONDOWN: {
+-        handle_mouse_event(event, p);
+-        break;
+-      }
++    case SDL_WINDOWEVENT: {
++      handle_window_event(event, p);
++      break;
++    }
++    case SDL_KEYUP: {
++      handle_keyboard_event(event, io::keyboard::key_state::depressed, p);
++      break;
++    }
++    case SDL_KEYDOWN: {
++      handle_keyboard_event(event, io::keyboard::key_state::pressed, p);
++      break;
++    }
++    case SDL_MOUSEWHEEL:
++    case SDL_MOUSEMOTION:
++    case SDL_MOUSEBUTTONUP:
++    case SDL_MOUSEBUTTONDOWN: {
++      handle_mouse_event(event, p);
++      break;
++    }
+     }
+   }
+ }
+
+-void alloy::extra::sdl2_pump_source
+-  ::handle_window_event(const ::SDL_Event& event, io::message_pump& p)
+-  noexcept
++void alloy::extra::sdl2_pump_source::handle_window_event(
++  const ::SDL_Event& event,
++  io::message_pump& p) noexcept
+ {
+   const auto id = event.window.windowID;
+   const auto it = m_windows.find(id);
+@@ -965,82 +964,80 @@ void alloy::extra::sdl2_pump_source
+   const auto window = it->second;
+
+   switch (event.window.event) {
++  case SDL_WINDOWEVENT_CLOSE: {
++    // Close events should be listened to as soon as possible;
++    // so this is posted as a high-priority event
++    p.post_immediate_event(io::window_close_event{window});
++    break;
++  }
+
+-    case SDL_WINDOWEVENT_CLOSE: {
+-      // Close events should be listened to as soon as possible;
+-      // so this is posted as a high-priority event
+-      p.post_immediate_event( io::window_close_event{window} );
+-      break;
+-    }
++  case SDL_WINDOWEVENT_MINIMIZED: {
++    p.post_event(io::window_minimize_event{window});
++    break;
++  }
++  case SDL_WINDOWEVENT_MAXIMIZED: {
++    p.post_event(io::window_maximize_event{window});
++    break;
++  }
++  case SDL_WINDOWEVENT_RESTORED: {
++    p.post_event(io::window_restore_event{window});
++    break;
++  }
+
+-    case SDL_WINDOWEVENT_MINIMIZED: {
+-      p.post_event( io::window_minimize_event{window} );
+-      break;
+-    }
+-    case SDL_WINDOWEVENT_MAXIMIZED: {
+-      p.post_event( io::window_maximize_event{window} );
+-      break;
+-    }
+-    case SDL_WINDOWEVENT_RESTORED: {
+-      p.post_event( io::window_restore_event{window} );
+-      break;
+-    }
++  case SDL_WINDOWEVENT_HIDDEN: {
++    p.post_event(io::window_hide_event{window});
++    break;
++  }
++  case SDL_WINDOWEVENT_EXPOSED: {
++    // TODO(bitwizeshift):
++    //   only fire this event if window was hidden before this change
++    p.post_event(io::window_show_event{window});
++    break;
++  }
+
+-    case SDL_WINDOWEVENT_HIDDEN: {
+-      p.post_event( io::window_hide_event{window} );
+-      break;
+-    }
+-    case SDL_WINDOWEVENT_EXPOSED: {
+-      // TODO(bitwizeshift):
+-      //   only fire this event if window was hidden before this change
+-      p.post_event( io::window_show_event{window} );
+-      break;
+-    }
++  case SDL_WINDOWEVENT_MOVED: {
++    const auto x = event.window.data1;
++    const auto y = event.window.data2;
+
+-    case SDL_WINDOWEVENT_MOVED: {
+-      const auto x = event.window.data1;
+-      const auto y = event.window.data2;
++    p.post_event(io::window_move_event{window, x, y});
++    break;
++  }
++  case SDL_WINDOWEVENT_SIZE_CHANGED: {
++    const auto width = event.window.data1;
++    const auto height = event.window.data2;
+
+-      p.post_event( io::window_move_event{window, x, y} );
+-      break;
+-    }
+-    case SDL_WINDOWEVENT_SIZE_CHANGED: {
+-      const auto width = event.window.data1;
+-      const auto height = event.window.data2;
++    p.post_event(io::window_resize_event{window, width, height});
++    break;
++  }
+
+-      p.post_event( io::window_resize_event{window, width, height} );
+-      break;
+-    }
+-
+-    // clang-tidy considers the next two branches as "clones" -- but it would be
+-    // bad to fall-through to code that only conditionally exists.
+-    //
+-    // NOLINTNEXTLINE(bugprone-branch-clone)
+-    case SDL_WINDOWEVENT_FOCUS_GAINED: {
+-      p.post_event( io::window_focus_event{window} );
+-      break;
+-    }
++  // clang-tidy considers the next two branches as "clones" -- but it would be
++  // bad to fall-through to code that only conditionally exists.
++  //
++  // NOLINTNEXTLINE(bugprone-branch-clone)
++  case SDL_WINDOWEVENT_FOCUS_GAINED: {
++    p.post_event(io::window_focus_event{window});
++    break;
++  }
+ #if SDL_VERSION_ATLEAST(2, 0, 5)
+-    case SDL_WINDOWEVENT_TAKE_FOCUS: {
+-      p.post_event( io::window_focus_event{window} );
+-      break;
+-    }
++  case SDL_WINDOWEVENT_TAKE_FOCUS: {
++    p.post_event(io::window_focus_event{window});
++    break;
++  }
+ #endif
+-    case SDL_WINDOWEVENT_FOCUS_LOST: {
+-      p.post_event( io::window_unfocus_event{window} );
+-      break;
+-    }
+-    default: {
+-      break;
+-    }
++  case SDL_WINDOWEVENT_FOCUS_LOST: {
++    p.post_event(io::window_unfocus_event{window});
++    break;
++  }
++  default: {
++    break;
++  }
+   }
+ }
+
+-void alloy::extra::sdl2_pump_source
+-  ::handle_keyboard_event(const ::SDL_Event& event,
+-                          io::keyboard::key_state state,
+-                          io::message_pump& p)
+-  noexcept
++void alloy::extra::sdl2_pump_source ::handle_keyboard_event(
++  const ::SDL_Event& event,
++  io::keyboard::key_state state,
++  io::message_pump& p) noexcept
+ {
+   const auto id = event.window.windowID;
+   const auto it = m_windows.find(id);
+@@ -1055,19 +1052,21 @@ void alloy::extra::sdl2_pump_source
+   const auto window = it->second;
+
+   const auto scan_code = ::to_scan_code(event.key.keysym.scancode);
+-  const auto key_code  = ::to_key_code(event.key.keysym.sym);
++  const auto key_code = ::to_key_code(event.key.keysym.sym);
+   const auto modifiers = ::to_modifiers(event.key.keysym.mod);
+
+-  p.post_event(io::keyboard_event{
+-    window,
+-    io::keyboard::symbol{ scan_code, key_code, modifiers, },
+-    state
+-  });
++  p.post_event(io::keyboard_event{window,
++                                  io::keyboard::symbol{
++                                    scan_code,
++                                    key_code,
++                                    modifiers,
++                                  },
++                                  state});
+ }
+
+-void alloy::extra::sdl2_pump_source::handle_mouse_event(const SDL_Event& event,
+-                                                        alloy::io::message_pump& p)
+-  noexcept
++void alloy::extra::sdl2_pump_source::handle_mouse_event(
++  const SDL_Event& event,
++  alloy::io::message_pump& p) noexcept
+ {
+   const auto id = event.window.windowID;
+   const auto it = m_windows.find(id);
+@@ -1080,39 +1079,38 @@ void alloy::extra::sdl2_pump_source::handle_mouse_event(const SDL_Event& event,
+   const auto window = it->second;
+
+   switch (event.type) {
+-    case SDL_MOUSEWHEEL: {
+-      p.post_event(io::mouse_scroll_event{
+-        window,
+-        event.wheel.x, event.wheel.y
+-      });
+-      return;
+-    }
+-    case SDL_MOUSEMOTION: {
+-      p.post_event(io::mouse_move_event{
+-        window,
+-        event.motion.x, event.motion.y,
+-        event.motion.xrel, event.motion.yrel,
+-      });
+-      return;
+-    }
+-    case SDL_MOUSEBUTTONDOWN: [[fallthrough]];
+-    case SDL_MOUSEBUTTONUP: {
+-      const auto button = to_mouse_button(event.button.button);
+-      const auto state = (event.button.state == SDL_PRESSED)
+-        ? io::mouse::button_state::pressed
+-        : io::mouse::button_state::depressed;
++  case SDL_MOUSEWHEEL: {
++    p.post_event(io::mouse_scroll_event{window, event.wheel.x, event.wheel.y});
++    return;
++  }
++  case SDL_MOUSEMOTION: {
++    p.post_event(io::mouse_move_event{
++      window,
++      event.motion.x,
++      event.motion.y,
++      event.motion.xrel,
++      event.motion.yrel,
++    });
++    return;
++  }
++  case SDL_MOUSEBUTTONDOWN:
++    [[fallthrough]];
++  case SDL_MOUSEBUTTONUP: {
++    const auto button = to_mouse_button(event.button.button);
++    const auto state = (event.button.state == SDL_PRESSED)
++                         ? io::mouse::button_state::pressed
++                         : io::mouse::button_state::depressed;
+
+-      if (!button) { return; }
+-
+-      p.post_event(io::mouse_button_event{
+-        window,
+-        event.button.x, event.button.y,
+-        *button, state
+-      });
++    if (!button) {
+       return;
+     }
+-    default: {
+-      break;
+-    }
++
++    p.post_event(io::mouse_button_event{window, event.button.x, event.button.y,
++                                        *button, state});
++    return;
++  }
++  default: {
++    break;
++  }
+   }
+ }
+diff --git a/extra/win32-bindings/CMakeLists.txt b/extra/win32-bindings/CMakeLists.txt
+index 756f1b0..6ff561b 100644
+--- a/extra/win32-bindings/CMakeLists.txt
++++ b/extra/win32-bindings/CMakeLists.txt
+@@ -29,7 +29,7 @@ add_library(${PROJECT_NAME}ExtraWin32Bindings
+ add_library(${PROJECT_NAME}::Extra::Win32Bindings ALIAS ${PROJECT_NAME}ExtraWin32Bindings)
+
+ target_compile_features(${PROJECT_NAME}ExtraWin32Bindings
+-  PUBLIC cxx_std_17
++  PUBLIC cxx_std_20
+ )
+ set_target_properties(${PROJECT_NAME}ExtraWin32Bindings
+   PROPERTIES
+diff --git a/lib/alloy-core/CMakeLists.txt b/lib/alloy-core/CMakeLists.txt
+index d23c29d..32befa4 100644
+--- a/lib/alloy-core/CMakeLists.txt
++++ b/lib/alloy-core/CMakeLists.txt
+@@ -211,6 +211,7 @@ set(source_files
+   # Strings
+   src/alloy/core/string/string_tokenizer.cpp
+   src/alloy/core/string/string_utilities.cpp
++  src/alloy/core/string/encoded_string.cpp
+
+   # Math
+   src/alloy/core/math/simplex.cpp
+diff --git a/lib/alloy-core/benchmark/src/alloy/core/math/simd.benchmark.cpp b/lib/alloy-core/benchmark/src/alloy/core/math/simd.benchmark.cpp
+index 0596a96..05cf365 100644
+--- a/lib/alloy-core/benchmark/src/alloy/core/math/simd.benchmark.cpp
++++ b/lib/alloy-core/benchmark/src/alloy/core/math/simd.benchmark.cpp
+@@ -4,8 +4,6 @@
+ */
+
+ #include "alloy/core/math/simd.hpp"
+-#include "alloy/core/math/math.hpp"
+-#include "alloy/core/math/vector.hpp"
+ #include "alloy/core/memory/allocator.hpp"
+
+ #include <array>
+@@ -13,7 +11,6 @@
+ #include <cstdlib>
+ #include <random>
+ #include <string>
+-#include <utility>
+
+ namespace alloy::core::benchmark {
+
+diff --git a/lib/alloy-core/include/alloy/core/geometry/plane.hpp b/lib/alloy-core/include/alloy/core/geometry/plane.hpp
+index f9e72d2..b4e1a32 100644
+--- a/lib/alloy-core/include/alloy/core/geometry/plane.hpp
++++ b/lib/alloy-core/include/alloy/core/geometry/plane.hpp
+@@ -169,6 +169,13 @@ namespace alloy::core {
+     [[nodiscard]]
+     auto distance_to(const point3& p) const noexcept -> real;
+
++    /// \brief Gets the nearest point on this box to the point \p p
++    ///
++    /// \param p the point to find the nearest point to
++    /// \return the point
++    [[nodiscard]]
++    auto nearest_point(const point3& p) const noexcept -> point3;
++
+     /// \brief Gets the projection of the specified vector onto this plane
+     ///
+     /// \param vec the vector to project
+diff --git a/lib/alloy-core/include/alloy/core/memory/allocator.hpp b/lib/alloy-core/include/alloy/core/memory/allocator.hpp
+index b1bc98b..64939fe 100644
+--- a/lib/alloy-core/include/alloy/core/memory/allocator.hpp
++++ b/lib/alloy-core/include/alloy/core/memory/allocator.hpp
+@@ -30,6 +30,7 @@
+ #ifndef ALLOY_CORE_MEMORY_ALLOCATOR_HPP
+ #define ALLOY_CORE_MEMORY_ALLOCATOR_HPP
+
++#include "alloy/core/memory/data_quantity.hpp"
+ #if defined(_MSC_VER) && (_MSC_VER >= 1200)
+ # pragma once
+ #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
+@@ -39,16 +40,110 @@
+ #include "alloy/core/utilities/not_null.hpp"
+ #include "alloy/core/utilities/scope_guard.hpp"
+ #include "alloy/core/intrinsics.hpp"
++#include "alloy/core/algorithms/max.hpp"
+
+ #include <cstring>     // std::memcpy
+ #include <cstddef>     // std::size_t, std::max_align_t
+ #include <type_traits> // std::enable_if, etc
+ #include <cstdlib>     // std::aligned_alloc, std::free
+ #include <new>         // ::operator new, ::operator delete
+-#include <algorithm>   // std::copy
++#include <utility>     // std::index_sequence
+
+ namespace alloy::core {
+
++  //////////////////////////////////////////////////////////////////////////////
++  /// \brief A pointer that
++  //////////////////////////////////////////////////////////////////////////////
++  template <typename...Types>
++  class compound_ptr
++  {
++    using ptr_set = std::tuple<Types*...>;
++
++    //--------------------------------------------------------------------------
++    // Constructors / Assignment
++    //--------------------------------------------------------------------------
++  public:
++
++    /// \{
++    /// \brief Constructs a compound_ptr that is null
++    constexpr compound_ptr() = default;
++    constexpr compound_ptr(std::nullptr_t) noexcept;
++    /// \}
++
++    constexpr compound_ptr(const compound_ptr&) = default;
++
++    //--------------------------------------------------------------------------
++
++    auto operator=(std::nullptr_t) noexcept -> compound_ptr&;
++    auto operator=(const compound_ptr& other) -> compound_ptr& = default;
++
++    //--------------------------------------------------------------------------
++    // Element Access
++    //--------------------------------------------------------------------------
++  public:
++
++    /// \brief Gets the base pointer
++    ///
++    /// \return a pointer to the base entry
++    constexpr auto base() const noexcept -> std::byte*;
++
++    /// \brief Gets a pointer to the Nth element
++    ///
++    /// \tparam N the nth element to get
++    /// \return the pointer
++    template <std::size_t N>
++    constexpr auto get() const noexcept -> std::tuple_element_t<N, ptr_set>;
++
++    /// \brief Gets the number of bytes in this compound_ptr
++    ///
++    /// \return the number of bytes
++    constexpr auto size() const noexcept -> bytes;
++
++    //--------------------------------------------------------------------------
++    // Private Members
++    //--------------------------------------------------------------------------
++  private:
++
++    ptr_set m_pointers;
++    bytes m_size;
++
++    /// \brief Constructs a compound_ptr that uses the base pointer `base`,
++    ///        where each sub pointer contains n `entries` that are aligned to
++    ///        `alignment`
++    ///
++    /// \pre `base` is aligned to an `alignment` boundary
++    ///
++    /// \pre `base` is large enough to support sequences of `Types...` containing
++    ///      `entries` elements contiguously, aligned to `alignment` (possibly
++    ///      with padding, if needed).
++    ///
++    /// \param base the pointer to the base element
++    /// \param bytes the number of bytes available off of `base`
++    /// \param entries the number of entries to create
++    /// \param alignment the alignment that each pointer must be aligned to
++    constexpr compound_ptr(
++      std::byte* base,
++      bytes bytes,
++      std::size_t entries,
++      std::size_t alignment
++    ) noexcept;
++
++    template <std::size_t...Idxs>
++    constexpr compound_ptr(
++      std::byte* base,
++      bytes bytes,
++      std::size_t entries,
++      std::size_t alignment,
++      std::index_sequence<Idxs...>
++    ) noexcept;
++
++    template <std::size_t N>
++    static constexpr auto offset_to(std::size_t length, std::size_t align)
++      noexcept -> std::size_t;
++
++    friend class allocator;
++  };
++
+   /////////////////////////////////////////////////////////////////////////////
+   /// \brief The basic allocator used in the engine
+   ///
+@@ -213,6 +308,20 @@ namespace alloy::core {
+       std::size_t align = std::size_t{alignof(T)}
+     ) noexcept -> T*;
+
++    //-------------------------------------------------------------------------
++
++    template <typename...Types>
++    auto allocate_compound(
++      std::size_t n = 1u,
++      std::size_t align = max(alignof(Types)...)
++    ) noexcept -> compound_ptr<Types...>;
++
++    template <typename...Types>
++    auto resize_compound(
++      const not_null<compound_ptr<Types...>>& p,
++      std::size_t n
++    ) noexcept -> bool;
++
+     //-------------------------------------------------------------------------
+     // Make / Dispose
+     //-------------------------------------------------------------------------
+@@ -526,6 +635,69 @@ namespace alloy::core {
+
+ } // namespace alloy::core
+
++//=============================================================================
++// inline definitions : class : compound_ptr
++//=============================================================================
++
++template <typename...Types>
++inline constexpr
++alloy::core::compound_ptr<Types...>::compound_ptr(std::nullptr_t)
++  noexcept
++  : compound_ptr()
++{
++
++}
++
++template <typename...Types>
++inline constexpr
++alloy::core::compound_ptr<Types...>::compound_ptr(
++  std::byte* base,
++  bytes bytes,
++  std::size_t entries,
++  std::size_t alignment
++) noexcept
++  : compound_ptr{base, bytes, entries, alignment, std::index_sequence_for<Types...>{}}
++{
++
++}
++
++template <typename...Types>
++template <std::size_t...Idxs>
++inline constexpr
++alloy::core::compound_ptr<Types...>::compound_ptr(
++  std::byte* base,
++  bytes bytes,
++  std::size_t entries,
++  std::size_t alignment,
++  std::index_sequence<Idxs...>
++) noexcept
++  : m_pointers{
++      reinterpret_cast<Types>(base + offset_to<Idxs>(entries, alignment))...
++    },
++    m_size{bytes}
++{
++
++}
++
++template <typename...Types>
++template <std::size_t N>
++inline constexpr
++auto alloy::core::compound_ptr<Types...>::offset_to(std::size_t length, std::size_t align)
++  noexcept -> std::size_t
++{
++  static_assert(N <= sizeof...(Types));
++
++  if constexpr(N == 0u) {
++    return 0u;
++  } else {
++    using type = std::remove_pointer_t<std::tuple_element_t<N-1, ptr_set>>;
++    const auto offset = sizeof(type) * length;
++
++    // Round up to the same alignment
++    return offset + (offset & (align - 1u));
++  }
++}
++
+ //=============================================================================
+ // inline definitions : class : allocator
+ //=============================================================================
+@@ -672,6 +844,44 @@ auto alloy::core::allocator::reallocate_objects(
+   return static_cast<T*>(result);
+ }
+
++template <typename...Types>
++ALLOY_FORCE_INLINE
++auto alloy::core::allocator::allocate_compound(
++  std::size_t n,
++  std::size_t align
++) noexcept -> compound_ptr<Types...>
++{
++  const auto size = compound_ptr<Types...>::template offset_to<sizeof...(Types)>(
++    n,
++    align
++  );
++
++  const auto p = allocate_bytes(size, align);
++
++  return compound_ptr<Types...>{
++    p,
++    bytes{size},
++    n,
++    align
++  };
++}
++
++template <typename...Types>
++ALLOY_FORCE_INLINE
++auto alloy::core::allocator::resize_compound(
++  const not_null<compound_ptr<Types...>>& p,
++  std::size_t n
++) noexcept -> bool
++{
++  // TODO(bitwizeshift): Implement this.
++  //
++  // Need to find a mechanism for retrieving the previous alignment, since this
++  // is needed for the compound offset computation
++  compiler::unused(n, p);
++  return false;
++}
++
++
+ //-----------------------------------------------------------------------------
+ // Make / Dispose
+ //-----------------------------------------------------------------------------
+diff --git a/lib/alloy-core/include/alloy/core/memory/lifetime_utilities.hpp b/lib/alloy-core/include/alloy/core/memory/lifetime_utilities.hpp
+index 5b0f2a1..c5d7449 100644
+--- a/lib/alloy-core/include/alloy/core/memory/lifetime_utilities.hpp
++++ b/lib/alloy-core/include/alloy/core/memory/lifetime_utilities.hpp
+@@ -1,13 +1,14 @@
+ /*****************************************************************************
+  * \file
+  *
+- * \brief
++ * \brief A collection of utilities for creating and destroying objects
++ *        at specific memory locations.
+  *****************************************************************************/
+
+ /*
+  The MIT License (MIT)
+
+- Copyright (c) 2022 Matthew Rodusek All rights reserved.
++ Copyright (c) 2022, 2025 Matthew Rodusek All rights reserved.
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+@@ -30,12 +31,12 @@
+ #ifndef ALLOY_CORE_MEMORY_LIFETIME_UTILITIES_HPP
+ #define ALLOY_CORE_MEMORY_LIFETIME_UTILITIES_HPP
+
+-#include "alloy/core/utilities/not_null.hpp"
+ #if defined(_MSC_VER)
+ # pragma once
+ #endif
+
+ #include "alloy/core/intrinsics.hpp"
++#include "alloy/core/utilities/not_null.hpp"
+
+ #include <iterator>
+ #include <tuple>
+@@ -59,22 +60,55 @@ namespace alloy::core {
+     //-------------------------------------------------------------------------
+   public:
+
+-    /// \brief
++    /// \brief Creates a single object of type T at the given memory location
++    ///
++    /// \pre \p where is a valid pointer to uninitialized memory of at least
++    ///      sizeof(T) bytes and properly aligned for T
++    ///
++    /// \tparam T the type to construct
++    /// \param args the arguments to forward to the construction
++    /// \return a pointer to the constructed T
+     template <typename T, typename...Args>
+     [[nodiscard]]
+     static auto make_at(not_null<void*> where, Args&&...args)
+       noexcept(std::is_nothrow_constructible_v<T,Args...>) -> not_null<T*>;
+
++    /// \brief Creates an array of default-constructed objects of type T
++    ///
++    /// \pre \p where is a valid pointer to uninitialized memory of at least
++    ///      sizeof(T) * length bytes and properly aligned for T
++    ///
++    /// \tparam T the type to construct
++    /// \param length the number of T's to construct
++    /// \return a pointer to the first constructed T
+     template <typename T>
+     [[nodiscard]]
+     static auto make_array_at(not_null<void*> where, std::size_t length)
+       noexcept(std::is_nothrow_constructible_v<T>) -> not_null<T*>;
+
++    /// \brief Creates an array of copy-constructed objects of type T
++    ///
++    /// \pre \p where is a valid pointer to uninitialized memory of at least
++    ///      sizeof(T) * length bytes and properly aligned for T
++    ///
++    /// \tparam T the type to construct
++    /// \param length the number of T's to construct
++    /// \param copy the object to copy-construct from
++    /// \return a pointer to the first constructed T
+     template <typename T>
+     [[nodiscard]]
+     static auto make_array_at(not_null<void*> where, std::size_t length, const T& copy)
+       noexcept(std::is_nothrow_copy_constructible_v<T>) -> not_null<T*>;
+
++    /// \brief Creates a single object of type T at the given memory location
++    ///        using the supplied tuple of arguments
++    ///
++    /// \pre \p where is a valid pointer to uninitialized memory of at least
++    ///      sizeof(T) bytes and properly aligned for T
++    ///
++    /// \tparam T the type to construct
++    /// \param args the tuple of arguments to forward to the constructor
++    /// \return a pointer to the constructed T
+     template <typename T, typename Tuple>
+     [[nodiscard]]
+     static auto make_from_tuple_at(not_null<void*> where, Tuple&& args) -> not_null<T*>;
+@@ -84,14 +118,33 @@ namespace alloy::core {
+     //-------------------------------------------------------------------------
+   public:
+
++    /// \brief Destroys the object of type T at the given memory location
++    ///
++    /// \pre \p p is a valid pointer constructed with `make_at<T>(...)`
++    ///
++    /// \tparam T the type to destroy
+     template <typename T>
+     static auto destroy(not_null<T*> p)
+       noexcept(std::is_nothrow_destructible_v<T>) -> void;
+
++    /// \brief Destroys an array of objects of type T at the given memory
++    ///        location
++    ///
++    /// \pre \p p is a valid pointer constructed with `make_array_at<T>(...)`
++    ///
++    /// \tparam T the type to destroy
++    /// \param length the number of entries in the array
+     template <typename T>
+     static auto destroy_array(not_null<T*> p, std::size_t length)
+       noexcept(std::is_nothrow_destructible_v<T>) -> void;
+
++    /// \brief Destroys a range of objects of type T
++    ///
++    /// \pre \p begin and \p end form a valid range of constructed objects of
++    ///      type T
++    ///
++    /// \param begin the beginning of the range
++    /// \param end the end of the range
+     template <typename It>
+     static auto destroy_range(It begin, It end)
+       noexcept(std::is_nothrow_destructible_v<typename std::iterator_traits<It>::value_type>) -> void;
+@@ -211,7 +264,7 @@ auto alloy::core::lifetime_utilities::make_array_impl(
+   const Args&...args
+ ) noexcept(std::is_nothrow_constructible_v<T,const Args&...>) -> not_null<T*>
+ {
+-  auto* const begin = static_cast<T*>(where.get());
++  auto* const begin = std::launder(static_cast<T*>(where.get()));
+   auto* const end   = begin + length;
+   auto* current     = begin;
+   auto* result      = begin;
+@@ -219,14 +272,14 @@ auto alloy::core::lifetime_utilities::make_array_impl(
+   if constexpr (std::is_nothrow_constructible_v<T,const Args&...>) {
+     result = new(static_cast<void*>(current++)) T(args...);
+     for (; current < end; ++current) {
+-      new (current) T(args...);
++      new (static_cast<void*>(current)) T(args...);
+     }
+-    return result;
++    return assume_not_null(result);
+   } else {
+     try {
+       result = new(static_cast<void*>(current++)) T(args...);
+       for (; current < end; ++current) {
+-        new (current) T(args...);
++        new (static_cast<void*>(current)) T(args...);
+       }
+     } catch (...) {
+       destroy_array(result, current - result);
+diff --git a/lib/alloy-core/include/alloy/core/thread/thread_group.hpp b/lib/alloy-core/include/alloy/core/thread/thread_group.hpp
+index bc84dec..39d71f9 100644
+--- a/lib/alloy-core/include/alloy/core/thread/thread_group.hpp
++++ b/lib/alloy-core/include/alloy/core/thread/thread_group.hpp
+@@ -35,6 +35,7 @@
+ #include "alloy/core/utilities/quantity.hpp"
+
+ #include <thread>
++#include <utility> // std::move
+
+ #if defined(_MSC_VER)
+ # pragma once
+@@ -72,8 +73,8 @@ namespace alloy::core {
+     thread_group(thread_group&& other) noexcept;
+     thread_group(const thread_group&) = delete;
+
+-    auto operator=(thread_group&& other) noexcept -> thread_group&;
+-    auto operator=(const thread_group& other) noexcept -> thread_group&;
++    auto operator=(thread_group&& other) noexcept -> thread_group& = delete;
++    auto operator=(const thread_group& other) noexcept -> thread_group& = delete;
+
+     //--------------------------------------------------------------------------
+     // Modifiers
+@@ -89,6 +90,8 @@ namespace alloy::core {
+
+     /// \brief Attaches a thread to this group
+     ///
++    /// This function will assert if `thread` is not joinable.
++    ///
+     /// \param thread the thread to attach
+     auto add_thread(std::thread thread) -> void;
+
+@@ -153,6 +156,14 @@ alloy::core::thread_group::thread_group(allocator alloc)
+
+ }
+
++ALLOY_FORCE_INLINE
++alloy::core::thread_group::thread_group(thread_group&& other)
++  noexcept
++  : m_threads{std::move(other.m_threads)}
++{
++
++}
++
+ //------------------------------------------------------------------------------
+ // Modifiers
+ //------------------------------------------------------------------------------
+diff --git a/lib/alloy-core/include/alloy/core/utilities/not_null.hpp b/lib/alloy-core/include/alloy/core/utilities/not_null.hpp
+index a858562..f08aeb5 100644
+--- a/lib/alloy-core/include/alloy/core/utilities/not_null.hpp
++++ b/lib/alloy-core/include/alloy/core/utilities/not_null.hpp
+@@ -434,7 +434,7 @@ namespace alloy::core {
+   /// \return a not_null containing the pointer
+   template <typename T>
+   constexpr auto assume_not_null(T&& ptr)
+-    noexcept(std::is_nothrow_constructible<typename std::decay<T>::type,T>::value)
++    noexcept(std::is_nothrow_constructible<std::decay_t<T>,T>::value)
+     -> not_null<std::decay_t<T>>;
+
+   template <typename T>
+diff --git a/lib/alloy-core/include/alloy/core/utilities/signal.hpp b/lib/alloy-core/include/alloy/core/utilities/signal.hpp
+index 36c0349..52b90bd 100644
+--- a/lib/alloy-core/include/alloy/core/utilities/signal.hpp
++++ b/lib/alloy-core/include/alloy/core/utilities/signal.hpp
+@@ -1288,7 +1288,7 @@ inline void alloy::core::sink<R(Args...)>::disconnect(Callable* callable, void*
+   const auto it = std::remove(
+     listeners.begin(),
+     listeners.end(),
+-    listener_type::template make(callable)
++    listener_type::template make<decltype(callable)>(callable)
+   );
+   listeners.erase(it, listeners.cend());
+ }
+diff --git a/lib/alloy-core/src/alloy/core/model/camera.cpp b/lib/alloy-core/src/alloy/core/model/camera.cpp
+index 1a027ca..c7f2e40 100644
+--- a/lib/alloy-core/src/alloy/core/model/camera.cpp
++++ b/lib/alloy-core/src/alloy/core/model/camera.cpp
+@@ -2,6 +2,22 @@
+
+ #include "alloy/core/math/vector/vector_utilities.hpp"
+
++#include <iostream>
++
++namespace {
++
++  auto print_matrix(alloy::core::matrix4& m) -> void {
++    std::cout << "\n[" << m.at(0,0) << ", " << m.at(0,1) << ", " << m.at(0,2) << ", " << m.at(0,3) << "]\n";
++    std::cout << "[" << m.at(1,0) << ", " << m.at(1,1) << ", " << m.at(1,2) << ", " << m.at(1,3) << "]\n";
++    std::cout << "[" << m.at(2,0) << ", " << m.at(2,1) << ", " << m.at(2,2) << ", " << m.at(2,3) << "]\n";
++    std::cout << "[" << m.at(3,0) << ", " << m.at(3,1) << ", " << m.at(3,2) << ", " << m.at(3,3) << "]\n\n";
++  }
++
++  auto print_quaternion(alloy::core::quaternion& q) -> void {
++    std::cout << "\nQuaternion{" << q.w() << ", " << q.x() << ", " << q.y() << ", " << q.z() << "}\n\n";
++  }
++}
++
+ //-----------------------------------------------------------------------------
+ // World Translations
+ //-----------------------------------------------------------------------------
+@@ -167,14 +183,14 @@ auto alloy::core::camera::set_yaw(radian angle)
+   m_orientation.extract_axes(&m_right, &m_up, &m_forward);
+ }
+
+-auto alloy::core::camera::set_orientation(const quaternion& orientation)
++auto alloy::core::camera::set_orientation(const quaternion& orientation)
+   noexcept -> void
+ {
+   m_orientation = orientation;
+   m_orientation.extract_axes(&m_right, &m_up, &m_forward);
+ }
+
+-auto alloy::core::camera::set_orientation(const euler_angles& angles)
++auto alloy::core::camera::set_orientation(const euler_angles& angles)
+   noexcept -> void
+ {
+   m_orientation = quaternion::from_angles(angles);
+@@ -190,7 +206,16 @@ auto alloy::core::camera::look_at(const vector3& subject, const vector3& up)
+   const auto y_axis = z_axis.cross(x_axis);
+
+   m_orientation = quaternion::from_rotation_axes(x_axis, y_axis, z_axis);
++  print_quaternion(m_orientation);
+   m_orientation.extract_axes(&m_right, &m_up, &m_forward);
++  auto matrix = matrix4{
++    x_axis.x(), x_axis.y(), x_axis.z(), 0,
++    y_axis.x(), y_axis.y(), y_axis.z(), 0,
++    z_axis.x(), z_axis.y(), z_axis.z(), 0,
++    0, 0, 0, 1
++  };
++  print_matrix(matrix);
++  std::cout << "\n\n";
+ }
+
+ auto alloy::core::camera::look_at(real x, real y, real z, const vector3& up)
+@@ -203,7 +228,7 @@ auto alloy::core::camera::look_at(real x, real y, real z, const vector3& up)
+ // Observers
+ //-----------------------------------------------------------------------------
+
+-auto alloy::core::camera::translation()
++auto alloy::core::camera::translation()
+   const noexcept -> vector3
+ {
+   return m_translation;
+@@ -235,6 +260,7 @@ auto alloy::core::camera::extract_matrix(not_null<matrix4*> out)
+   m_orientation.extract_rotation_matrix(out);
+
+   auto& result = *out;
++  print_matrix(result);
+
+   const auto x_axis = to_vector3(result.row(0));
+   const auto y_axis = to_vector3(result.row(1));
+@@ -247,8 +273,10 @@ auto alloy::core::camera::extract_matrix(not_null<matrix4*> out)
+   result[0][3] = x_pos;
+   result[1][3] = y_pos;
+   result[2][3] = z_pos;
++  print_matrix(result);
+ }
+
++
+ auto alloy::core::camera::to_matrix4()
+   const noexcept -> matrix4
+ {
+diff --git a/lib/alloy-core/test/CMakeLists.txt b/lib/alloy-core/test/CMakeLists.txt
+index fb05046..c910bf7 100644
+--- a/lib/alloy-core/test/CMakeLists.txt
++++ b/lib/alloy-core/test/CMakeLists.txt
+@@ -21,6 +21,8 @@ set(source_files
+   src/alloy/core/string/encoding/utf32_encoding.test.cpp
+   src/alloy/core/string/encoding/utf8_encoding.test.cpp
+   src/alloy/core/string/encoding/wide_encoding.test.cpp
++  src/alloy/core/string/encoded_string_view.test.cpp
++  src/alloy/core/string/utf8_string.test.cpp
+   src/alloy/core/string/string_tokenizer.test.cpp
+
+   # Containers
+diff --git a/lib/alloy-io/CMakeLists.txt b/lib/alloy-io/CMakeLists.txt
+index 930b041..9594a5f 100644
+--- a/lib/alloy-io/CMakeLists.txt
++++ b/lib/alloy-io/CMakeLists.txt
+@@ -37,6 +37,7 @@ set(header_files
+   include/alloy/io/events/window_events.hpp
+   include/alloy/io/events/filesystem_events.hpp
+   include/alloy/io/event.hpp
++  include/alloy/io/filesystem/path.hpp
+   include/alloy/io/keyboard.hpp
+   include/alloy/io/sequence_detector.hpp
+   include/alloy/io/window.hpp
+diff --git a/lib/alloy-io/include/alloy/io/filesystem/file.hpp b/lib/alloy-io/include/alloy/io/filesystem/file.hpp
+index b7432f7..9bc60bc 100644
+--- a/lib/alloy-io/include/alloy/io/filesystem/file.hpp
++++ b/lib/alloy-io/include/alloy/io/filesystem/file.hpp
+@@ -31,6 +31,7 @@
+ #define ALLOY_IO_FILESYSTEM_FILE_HPP
+
+ #include "alloy/io/api.hpp"
++#include "alloy/io/filesystem/file_stream.hpp"
+ #include "alloy/io/filesystem/file_stream_handle.hpp"
+ #include "alloy/io/buffers/const_buffer.hpp"
+ #include "alloy/io/buffers/mutable_buffer.hpp"
+diff --git a/lib/alloy-io/include/alloy/io/filesystem/random_filesystem.hpp b/lib/alloy-io/include/alloy/io/filesystem/random_filesystem.hpp
+index cfb23da..92b9173 100644
+--- a/lib/alloy-io/include/alloy/io/filesystem/random_filesystem.hpp
++++ b/lib/alloy-io/include/alloy/io/filesystem/random_filesystem.hpp
+@@ -70,7 +70,7 @@ namespace alloy::io {
+     /// \brief Opens a null file
+     ///
+     /// \return the file
+-    file open() noexcept;
++    auto open() noexcept -> file;
+   };
+
+ } // namespace alloy::io
