@@ -55,7 +55,7 @@ func (e EnvEnabler) EnableColour(w io.Writer) bool {
 var _ Enabler = (*EnvEnabler)(nil)
 
 // InvertEnabler negates an inner Enabler's decision. Use it to turn an
-// "opt-out" signal (such as NO_COLOUR) into the equivalent enable check.
+// "opt-out" signal (such as NO_COLOR) into the equivalent enable check.
 type InvertEnabler struct {
 	Enabler Enabler
 }
@@ -87,13 +87,13 @@ func (c ConjunctiveEnabler) EnableColour(w io.Writer) bool {
 var _ Enabler = (*ConjunctiveEnabler)(nil)
 
 // DefaultEnabler is the standard policy: colour is enabled only when the
-// writer is a real terminal and the NO_COLOUR environment variable is not
+// writer is a real terminal and the NO_COLOR environment variable is not
 // set to a truthy value (see https://no-colour.org/).
 var DefaultEnabler Enabler = ConjunctiveEnabler{
 	IsTTYFuncEnabler(term.IsTerminal),
 	InvertEnabler{
 		Enabler: EnvEnabler{
-			Variable: "NO_COLOUR",
+			Variable: "NO_COLOR",
 		},
 	},
 }
